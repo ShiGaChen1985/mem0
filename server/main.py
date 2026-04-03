@@ -35,8 +35,8 @@ else:
 
 POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "postgres")
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
-POSTGRES_DB = os.environ.get("POSTGRES_DB", "postgres")
-POSTGRES_USER = os.environ.get("POSTGRES_USER", "postgres")
+POSTGRES_DB = os.environ.get("POSTGRES_DB") or os.environ.get("POSTGRES_DATABASE", "postgres")
+POSTGRES_USER = os.environ.get("POSTGRES_USER") or os.environ.get("POSTGRES_USERNAME", "postgres")
 POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
 POSTGRES_COLLECTION_NAME = os.environ.get("POSTGRES_COLLECTION_NAME", "memories")
 
