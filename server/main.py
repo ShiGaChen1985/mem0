@@ -48,6 +48,8 @@ MEMGRAPH_URI = os.environ.get("MEMGRAPH_URI", "bolt://localhost:7687")
 MEMGRAPH_USERNAME = os.environ.get("MEMGRAPH_USERNAME", "memgraph")
 MEMGRAPH_PASSWORD = os.environ.get("MEMGRAPH_PASSWORD", "mem0graph")
 
+GRAPH_STORE_ENABLED = os.environ.get("GRAPH_STORE_ENABLED", "true").lower() in ("true", "1", "yes")
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "openai")
@@ -88,14 +90,16 @@ DEFAULT_CONFIG = {
             "collection_name": POSTGRES_COLLECTION_NAME,
         },
     },
-    "graph_store": {
-        "provider": "neo4j",
-        "config": {"url": NEO4J_URI, "username": NEO4J_USERNAME, "password": NEO4J_PASSWORD},
-    },
     "llm": _llm_config,
     "embedder": {"provider": "openai", "config": {"api_key": OPENAI_API_KEY, "model": "text-embedding-3-small"}},
     "history_db_path": HISTORY_DB_PATH,
 }
+
+if GRAPH_STORE_ENABLED:
+    DEFAULT_CONFIG["graph_store"] = {
+        "provider": "neo4j",
+        "config": {"url": NEO4J_URI, "username": NEO4J_USERNAME, "password": NEO4J_PASSWORD},
+    }
 
 
 MEMORY_INSTANCE = Memory.from_config(DEFAULT_CONFIG)
