@@ -102,7 +102,17 @@ if GRAPH_STORE_ENABLED:
     }
 
 
-MEMORY_INSTANCE = Memory.from_config(DEFAULT_CONFIG)
+MEMORY_INSTANCE: Optional[Memory] = None
+
+
+def get_memory() -> Memory:
+    """Lazy-initialize Memory so the server can start even if the DB is unreachable."""
+    global MEMORY_INSTANCE
+    if MEMORY_INSTANCE is None:
+        logging.info("Initializing Memory instance with config: %s", {k: v for k, v in DEFAULT_CONFIG.items() if k != "llm"})
+        MEMORY_INSTANCE = Memory.from_config(DEFAULT_CONFIG)
+    return MEMORY_INSTANCE
+
 
 app = FastAPI(
     title="Mem0 REST APIs",
@@ -183,7 +193,7 @@ def add_memory(memory_create: MemoryCreate, _api_key: Optional[str] = Depends(ve
 
     params = {k: v for k, v in memory_create.model_dump().items() if v is not None and k != "messages"}
     try:
-        response = MEMORY_INSTANCE.add(messages=[m.model_dump() for m in memory_create.messages], **params)
+        response = get_memory().add(messages=[m.model_dump() for m in memory_create.messages], **params)
         return JSONResponse(content=response)
     except Exception as e:
         logging.exception("Error in add_memory:")  # This will log the full traceback
@@ -204,19 +214,19 @@ def get_all_memories(
         params = {
             k: v for k, v in {"user_id": user_id, "run_id": run_id, "agent_id": agent_id}.items() if v is not None
         }
-        return MEMORY_INSTANCE.get_all(**params)
+        return get_memory().get_all(**params)
     except Exception as e:
         logging.exception("Error in get_all_memories:")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/memories/{memory_id}", summary="Get a memory")
-def get_memory(memory_id: str, _api_key: Optional[str] = Depends(verify_api_key)):
+def get_memory_by_id(memory_id: str, _api_key: Optional[str] = Depends(verify_api_key)):
     """Retrieve a specific memory by ID."""
     try:
-        return MEMORY_INSTANCE.get(memory_id)
+        return get_memory().get(memory_id)
     except Exception as e:
-        logging.exception("Error in get_memory:")
+        logging.exception("Error in get_memory_by_id:")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -225,7 +235,7 @@ def search_memories(search_req: SearchRequest, _api_key: Optional[str] = Depends
     """Search for memories based on a query."""
     try:
         params = {k: v for k, v in search_req.model_dump().items() if v is not None and k != "query"}
-        return MEMORY_INSTANCE.search(query=search_req.query, **params)
+        return get_memory().search(query=search_req.query, **params)
     except Exception as e:
         logging.exception("Error in search_memories:")
         raise HTTPException(status_code=500, detail=str(e))
@@ -243,7 +253,7 @@ def update_memory(memory_id: str, updated_memory: MemoryUpdate, _api_key: Option
         dict: Success message indicating the memory was updated
     """
     try:
-        return MEMORY_INSTANCE.update(memory_id=memory_id, data=updated_memory.text, metadata=updated_memory.metadata)
+        return get_memory().update(memory_id=memory_id, data=updated_memory.text, metadata=updated_memory.metadata)
     except Exception as e:
         logging.exception("Error in update_memory:")
         raise HTTPException(status_code=500, detail=str(e))
@@ -253,7 +263,7 @@ def update_memory(memory_id: str, updated_memory: MemoryUpdate, _api_key: Option
 def memory_history(memory_id: str, _api_key: Optional[str] = Depends(verify_api_key)):
     """Retrieve memory history."""
     try:
-        return MEMORY_INSTANCE.history(memory_id=memory_id)
+        return get_memory().history(memory_id=memory_id)
     except Exception as e:
         logging.exception("Error in memory_history:")
         raise HTTPException(status_code=500, detail=str(e))
@@ -263,7 +273,7 @@ def memory_history(memory_id: str, _api_key: Optional[str] = Depends(verify_api_
 def delete_memory(memory_id: str, _api_key: Optional[str] = Depends(verify_api_key)):
     """Delete a specific memory by ID."""
     try:
-        MEMORY_INSTANCE.delete(memory_id=memory_id)
+        get_memory().delete(memory_id=memory_id)
         return {"message": "Memory deleted successfully"}
     except Exception as e:
         logging.exception("Error in delete_memory:")
@@ -284,7 +294,7 @@ def delete_all_memories(
         params = {
             k: v for k, v in {"user_id": user_id, "run_id": run_id, "agent_id": agent_id}.items() if v is not None
         }
-        MEMORY_INSTANCE.delete_all(**params)
+        get_memory().delete_all(**params)
         return {"message": "All relevant memories deleted"}
     except Exception as e:
         logging.exception("Error in delete_all_memories:")
@@ -295,11 +305,17 @@ def delete_all_memories(
 def reset_memory(_api_key: Optional[str] = Depends(verify_api_key)):
     """Completely reset stored memories."""
     try:
-        MEMORY_INSTANCE.reset()
+        get_memory().reset()
         return {"message": "All memories reset"}
     except Exception as e:
         logging.exception("Error in reset_memory:")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/health", summary="Health check")
+def health_check():
+    """Basic health check — does not initialize Memory."""
+    return {"status": "ok", "memory_initialized": MEMORY_INSTANCE is not None}
 
 
 @app.get("/", summary="Redirect to the OpenAPI documentation", include_in_schema=False)
